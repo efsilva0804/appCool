@@ -1,0 +1,129 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+    
+    function isOwner(userId) {
+      return request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'eniofds@gmail.com' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+    
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['nome', 'email', 'role', 'saldo_horas', 'status'])
+        && data.nome is string && data.nome.size() <= 100
+        && (!('telefone' in data) || (data.telefone is string && data.telefone.size() <= 20))
+        && (!('profissao' in data) || (data.profissao is string && data.profissao.size() <= 100))
+        && data.email is string && data.email.size() <= 150
+        && data.role in ['admin', 'professional']
+        && data.saldo_horas is number
+        && data.status in ['active', 'suspended'];
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn() && (isOwner(userId) || isAdmin());
+      
+      allow create: if isSignedIn() && isValidId(userId) && isOwner(userId)
+        && isValidUser(incoming())
+        && incoming().keys().size() <= 7 // All potential fields
+        && (incoming().role == 'professional' || (incoming().role == 'admin' && request.auth.token.email == 'eniofds@gmail.com'))
+        && incoming().saldo_horas == 0
+        && incoming().status == 'active';
+        
+      allow update: if isSignedIn() && isValidId(userId) && isValidUser(incoming()) && (
+        (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['nome', 'telefone', 'profissao', 'saldo_horas', 'status', 'role'])) ||
+        (isOwner(userId) && existing().role == 'professional' && incoming().diff(existing()).affectedKeys().hasOnly(['nome', 'telefone', 'profissao']) && incoming().role == existing().role && incoming().saldo_horas == existing().saldo_horas && incoming().status == existing().status)
+      );
+      
+      allow delete: if isAdmin();
+    }
+    
+    function isValidRoom(data) {
+      return data.keys().hasAll(['nome', 'capacidade'])
+        && data.nome is string && data.nome.size() <= 100
+        && data.capacidade is number && data.capacidade > 0 && data.capacidade <= 100;
+    }
+
+    match /rooms/{roomId} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin() && isValidId(roomId) && isValidRoom(incoming()) && incoming().keys().size() == 2;
+      allow update: if isAdmin() && isValidId(roomId) && isValidRoom(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly(['nome', 'capacidade']);
+      allow delete: if isAdmin();
+    }
+
+    function isValidReservation(data) {
+      return data.keys().hasAll(['usuario_id', 'sala_id', 'data', 'hora_inicio', 'hora_fim', 'status', 'recorrente', 'createdAt'])
+        && data.usuario_id is string && isValidId(data.usuario_id)
+        && data.sala_id is string && isValidId(data.sala_id)
+        && data.data is string && data.data.size() == 10 // YYYY-MM-DD
+        && data.hora_inicio is string && data.hora_inicio.size() == 5 // HH:MM
+        && data.hora_fim is string && data.hora_fim.size() == 5 // HH:MM
+        && data.status in ['pendente', 'aprovada', 'recusada', 'cancelada']
+        && data.recorrente is bool
+        && data.createdAt is number;
+    }
+
+    match /reservations/{reservationId} {
+      allow read: if isSignedIn() && (existing().usuario_id == request.auth.uid || isAdmin());
+      
+      allow create: if isSignedIn() && isValidId(reservationId)
+        && isValidReservation(incoming())
+        && incoming().keys().size() == 8
+        && incoming().usuario_id == request.auth.uid
+        && incoming().status == 'pendente'
+        && incoming().createdAt == request.time.toMillis()
+        && exists(/databases/$(database)/documents/users/$(incoming().usuario_id))
+        && exists(/databases/$(database)/documents/rooms/$(incoming().sala_id));
+        
+      allow update: if isSignedIn() && isValidId(reservationId) && isValidReservation(incoming()) && (
+        (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'hora_inicio', 'hora_fim', 'data'])) ||
+        (existing().usuario_id == request.auth.uid && incoming().diff(existing()).affectedKeys().hasOnly(['status']) && existing().status == 'pendente' && incoming().status == 'cancelada'
+         && incoming().usuario_id == existing().usuario_id && incoming().sala_id == existing().sala_id
+         && incoming().recorrente == existing().recorrente && incoming().createdAt == existing().createdAt)
+      );
+      
+      allow delete: if isAdmin();
+    }
+
+    function isValidCreditTx(data) {
+      return data.keys().hasAll(['usuario_id', 'horas_adicionadas', 'horas_utilizadas', 'saldo_resultante', 'data', 'descricao'])
+        && data.usuario_id is string && isValidId(data.usuario_id)
+        && data.horas_adicionadas is number
+        && data.horas_utilizadas is number
+        && data.saldo_resultante is number
+        && data.data is number
+        && data.descricao is string && data.descricao.size() <= 250;
+    }
+
+    match /credit_transactions/{transactionId} {
+      allow read: if isSignedIn() && (existing().usuario_id == request.auth.uid || isAdmin());
+      allow create: if isAdmin() && isValidId(transactionId) && isValidCreditTx(incoming()) && incoming().keys().size() == 6
+        && exists(/databases/$(database)/documents/users/$(incoming().usuario_id));
+      allow update: if false; // Transactions are immutable
+      allow delete: if false; // Transactions are append-only
+    }
+  }
+}

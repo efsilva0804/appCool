@@ -1,0 +1,77 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "A user of the application (admin or professional).",
+      "type": "object",
+      "properties": {
+        "nome": { "type": "string", "description": "Name" },
+        "telefone": { "type": "string", "description": "Phone number" },
+        "email": { "type": "string", "description": "Email address" },
+        "profissao": { "type": "string", "description": "Profession" },
+        "saldo_horas": { "type": "number", "description": "Balance in hours" },
+        "status": { "type": "string", "enum": ["active", "suspended"] },
+        "role": { "type": "string", "enum": ["admin", "professional"] }
+      },
+      "required": ["nome", "email", "role", "saldo_horas", "status"]
+    },
+    "Room": {
+      "title": "Room",
+      "description": "A physical room or shared space.",
+      "type": "object",
+      "properties": {
+        "nome": { "type": "string" },
+        "capacidade": { "type": "number", "description": "Number of spaces" }
+      },
+      "required": ["nome", "capacidade"]
+    },
+    "Reservation": {
+      "title": "Reservation",
+      "description": "A booking request.",
+      "type": "object",
+      "properties": {
+        "usuario_id": { "type": "string" },
+        "sala_id": { "type": "string" },
+        "data": { "type": "string", "description": "YYYY-MM-DD format" },
+        "hora_inicio": { "type": "string", "description": "HH:MM format" },
+        "hora_fim": { "type": "string", "description": "HH:MM format" },
+        "status": { "type": "string", "enum": ["pendente", "aprovada", "recusada", "cancelada"] },
+        "recorrente": { "type": "boolean" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["usuario_id", "sala_id", "data", "hora_inicio", "hora_fim", "status", "recorrente", "createdAt"]
+    },
+    "CreditTransaction": {
+      "title": "Credit Transaction",
+      "description": "Record of hours added or used.",
+      "type": "object",
+      "properties": {
+        "usuario_id": { "type": "string" },
+        "horas_adicionadas": { "type": "number" },
+        "horas_utilizadas": { "type": "number" },
+        "saldo_resultante": { "type": "number" },
+        "data": { "type": "number" },
+        "descricao": { "type": "string" }
+      },
+      "required": ["usuario_id", "horas_adicionadas", "horas_utilizadas", "saldo_resultante", "data"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "User profiles"
+    },
+    "/rooms/{roomId}": {
+      "schema": { "$ref": "#/entities/Room" },
+      "description": "Coworking rooms"
+    },
+    "/reservations/{reservationId}": {
+      "schema": { "$ref": "#/entities/Reservation" },
+      "description": "Booking requests and active schedules"
+    },
+    "/credit_transactions/{transactionId}": {
+      "schema": { "$ref": "#/entities/CreditTransaction" },
+      "description": "Audit log of credit additions/deductions"
+    }
+  }
+}

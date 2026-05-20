@@ -1,0 +1,6 @@
+{
+  "name": "Agenda Coworking Terapêutico",
+  "description": "Aplicativo de Gestão de Agenda para Coworking Terapêutico.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
